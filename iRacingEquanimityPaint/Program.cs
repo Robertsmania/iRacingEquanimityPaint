@@ -8,6 +8,7 @@ namespace iRacingEquanimityPaint
 {
     class Program
     {
+        const int cLoadTimer = 10000;
         static IRSDKSharper irsdk = new IRSDKSharper();
         static int subSessionID = 0;
         static int driverCarIdx = 0;
@@ -44,7 +45,7 @@ namespace iRacingEquanimityPaint
             }
         }
 
-        static void OnSessionInfo()
+        static async void OnSessionInfo()
         {
             var thisSubSessionID = irsdk.Data.SessionInfo.WeekendInfo.SubSessionID;
             var driverInfo = irsdk.Data.SessionInfo.DriverInfo.Drivers;
@@ -55,6 +56,8 @@ namespace iRacingEquanimityPaint
                 subSessionID = thisSubSessionID;
                 Console.WriteLine($"New Session! {thisSubSessionID}");
                 driverCache.Clear();
+                //Delay to let iRacing load completely
+                await Task.Delay(cLoadTimer);
             }
 
             UpdateDriverCache(driverInfo);
@@ -76,24 +79,28 @@ namespace iRacingEquanimityPaint
                 {
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver {driverModel.UserID} to cache with car path: {driverModel.CarPath}");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath);
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_num_");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_decal_");
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
             }
         }
 
-        static void CopyPaint(int userID, string carPath)
+        static void CopyPaint(int userID, string carPath, string paintType)
         {
             try
             {
                 // Construct the path to the common paint file
-                string commonPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_common.tga");
+                string commonPaint = $"car{paintType}common.tga";
+                string commonPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", commonPaint);
 
                 // Check if the common paint file exists
                 if (File.Exists(commonPaintFilePath))
                 {
                     // Construct the path to the user-specific paint file
-                    string userPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_{userID}.tga");
+                    string userPaint = $"car{paintType}{userID}.tga";
+                    string userPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userPaint);
 
                     // Copy the common paint file to the user-specific paint file, overwriting if it already exists
                     File.Copy(commonPaintFilePath, userPaintFilePath, true);

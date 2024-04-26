@@ -2,7 +2,7 @@
  * Copyright 2024 Robertsmania
  * All Rights Reserved
  */
-using HerboldRacing; // Assume IRSDKSharper and relevant classes are in this namespace
+using HerboldRacing; //IRSDKSharper
 
 namespace iRacingEquanimityPaint
 {
@@ -11,19 +11,18 @@ namespace iRacingEquanimityPaint
         static IRSDKSharper irsdk = new IRSDKSharper();
         static int subSessionID = 0;
         static int driverCarIdx = 0;
-        // Cache for storing driver information using UserID as the key
         static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
         static string documentsFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
         static async Task Main(string[] args)
         {
             var cancellationTokenSource = new CancellationTokenSource();
-            irsdk.OnSessionInfo += OnSessionInfo;  // Hook the event handler for session info.
+            irsdk.OnSessionInfo += OnSessionInfo;  
 
-            irsdk.Start();  // Start listening to iRacing data.
+            irsdk.Start();  
 
             // Start an asynchronous task to monitor for quit key press
-            var quitTask = MonitorQuitAsync(cancellationTokenSource.Token);
+            var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
 
             Console.WriteLine("Application started. Press Q to quit. R to force a re-run.");
             Console.WriteLine("Use Ctrl-R in game to force the paints to update."); 
@@ -39,7 +38,7 @@ namespace iRacingEquanimityPaint
             }
             finally
             {
-                irsdk.Stop();  // Ensure the SDK is properly stopped on exit.
+                irsdk.Stop();  
                 cancellationTokenSource.Cancel();
                 cancellationTokenSource.Dispose();
             }
@@ -48,9 +47,8 @@ namespace iRacingEquanimityPaint
         static void OnSessionInfo()
         {
             var thisSubSessionID = irsdk.Data.SessionInfo.WeekendInfo.SubSessionID;
-            var trackName = irsdk.Data.SessionInfo.WeekendInfo.TrackName;
             var driverInfo = irsdk.Data.SessionInfo.DriverInfo.Drivers;
-            var driverCarIdx = irsdk.Data.SessionInfo.DriverInfo.DriverCarIdx;
+            driverCarIdx = irsdk.Data.SessionInfo.DriverInfo.DriverCarIdx;
 
             if (subSessionID != thisSubSessionID)
             {
@@ -68,16 +66,16 @@ namespace iRacingEquanimityPaint
             foreach (var driverModel in currentDriverModels)
             {
                 //Don't add "us" or the pace car
-                if (driverModel.UserID < 1 || driverModel.UserID == driverCarIdx)
+                if (driverModel.UserID < 1 || driverModel.CarIdx == driverCarIdx)
                 {
                     continue;
                 }
 
+                //New here?
                 if (!driverCache.ContainsKey(driverModel.UserID))
                 {
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver {driverModel.UserID} to cache with car path: {driverModel.CarPath}");
-                    // Here you can call a method to handle the car livery update for the new driver
                     CopyPaint(driverModel.UserID, driverModel.CarPath);
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
@@ -104,7 +102,6 @@ namespace iRacingEquanimityPaint
                 else
                 {
                     Console.WriteLine($"Common paint file does not exist: {commonPaintFilePath}");
-                    // Handle the absence of the common paint file if necessary
                 }
             }
             catch (UnauthorizedAccessException e)
@@ -130,7 +127,7 @@ namespace iRacingEquanimityPaint
         }
 
         // Asynchronously wait for the user to press 'Q' to quit or 'R' to re-run
-        static async Task MonitorQuitAsync(CancellationToken cancellationToken)
+        static async Task MonitorUserInputAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -147,7 +144,7 @@ namespace iRacingEquanimityPaint
                         OnSessionInfo();
                     }
                 }
-                await Task.Delay(100, cancellationToken); // Efficiently wait before checking again
+                await Task.Delay(100, cancellationToken); // wait before checking again
             }
         }
     }

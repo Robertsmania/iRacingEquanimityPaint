@@ -82,6 +82,7 @@ namespace iRacingEquanimityPaint
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "_");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "_num_");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "_decal_");
+                    CopyHelmet(driverModel.UserID);
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
             }
@@ -114,6 +115,52 @@ namespace iRacingEquanimityPaint
             catch (UnauthorizedAccessException e)
             {
                 Console.WriteLine($"Access denied. Cannot write to the paint file: {e.Message}");
+            }
+            catch (PathTooLongException e)
+            {
+                Console.WriteLine($"The specified path is too long: {e.Message}");
+            }
+            catch (DirectoryNotFoundException e)
+            {
+                Console.WriteLine($"The specified directory was not found: {e.Message}");
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine($"An I/O error occurred while copying the file: {e.Message}");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"An unexpected error occurred: {e.Message}");
+            }
+        }
+
+        static void CopyHelmet(int userID)
+        {
+            try
+            {
+                // Common helmet
+                const string commonHelmet = "helmet_common.tga";
+                string commonHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", "common", commonHelmet);
+
+                // Check if the common helmet file exists
+                if (File.Exists(commonHelmetFilePath))
+                {
+                    // Construct the path to the user-specific helmet file
+                    string userHelmet = $"{userID}.tga";
+                    string userHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", userHelmet);
+
+                    // Copy the common helmet file to the user-specific helmet file, overwriting if it already exists
+                    File.Copy(commonHelmetFilePath, userHelmetFilePath, true);
+                    Console.WriteLine($"Copied common helmet to: {userHelmetFilePath}");
+                }
+                else
+                {
+                    Console.WriteLine($"Common helmet file does not exist: {commonHelmetFilePath}");
+                }
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                Console.WriteLine($"Access denied. Cannot write to the helmet file: {e.Message}");
             }
             catch (PathTooLongException e)
             {

@@ -25,7 +25,7 @@ namespace iRacingEquanimityPaint
             // Start an asynchronous task to monitor for quit key press
             var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
 
-            Console.WriteLine("Application started. Press Q to quit. R to force a re-run.");
+            Console.WriteLine("iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
             Console.WriteLine("Use Ctrl-R in game to force the paints to update."); 
 
             try
@@ -56,16 +56,15 @@ namespace iRacingEquanimityPaint
                 subSessionID = thisSubSessionID;
                 Console.WriteLine($"New Session! {thisSubSessionID}");
                 driverCache.Clear();
-                //Delay to let iRacing load completely
-                await Task.Delay(cLoadTimer);
+                await Task.Delay(cLoadTimer); //Delay to let iRacing load completely
             }
 
             UpdateDriverCache(driverInfo);
         }
 
+        // Add new drivers to the cache
         static void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
         {
-            // Add new drivers to the cache
             foreach (var driverModel in currentDriverModels)
             {
                 //Don't add "us" or the pace car
@@ -79,88 +78,57 @@ namespace iRacingEquanimityPaint
                 {
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver {driverModel.UserID} to cache with car path: {driverModel.CarPath}");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_num_");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "_decal_");
-                    CopyHelmet(driverModel.UserID);
+                    CopyCarPaints(driverModel.UserID, driverModel.CarPath);
+                    CopyDriverPaints(driverModel.UserID);
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
             }
         }
 
-        static void CopyPaint(int userID, string carPath, string paintType)
+        static void CopyCarPaints(int userID, string carPath)
+        {
+            string commonCarPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_common.tga");
+            string commonNumPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_num_common.tga");
+            string commonDecalPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_decal_common.tga");
+
+            string userCarPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_{userID}.tga");
+            string userNumPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_num_{userID}.tga");
+            string userDecalPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_decal_{userID}.tga");
+            
+            CopyTexture(commonCarPaintFilePath, userCarPaintFilePath);
+            CopyTexture(commonNumPaintFilePath, userNumPaintFilePath);
+            CopyTexture(commonDecalPaintFilePath, userDecalPaintFilePath);
+        }
+
+        static void CopyDriverPaints(int userID)
+        {
+            string commonHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", "common", "helmet_common.tga");
+            string commonSuitFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "suits", "common", "suit_common.tga");
+
+            string userHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", $"{userID}.tga");
+            string userSuitFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "suits", $"{userID}.tga");
+
+            CopyTexture(commonHelmetFilePath, userHelmetFilePath);
+            CopyTexture(commonSuitFilePath, userSuitFilePath);
+        }
+
+        static void CopyTexture(string commonFilePath, string userFilePath)
         {
             try
             {
-                // Construct the path to the common paint file
-                string commonPaint = $"car{paintType}common.tga";
-                string commonPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", commonPaint);
-
-                // Check if the common paint file exists
-                if (File.Exists(commonPaintFilePath))
+                if (File.Exists(commonFilePath))
                 {
-                    // Construct the path to the user-specific paint file
-                    string userPaint = $"car{paintType}{userID}.tga";
-                    string userPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userPaint);
-
-                    // Copy the common paint file to the user-specific paint file, overwriting if it already exists
-                    File.Copy(commonPaintFilePath, userPaintFilePath, true);
-                    Console.WriteLine($"Copied common paint to: {userPaintFilePath}");
+                    File.Copy(commonFilePath, userFilePath, true);
+                    Console.WriteLine($"Copied common file to: {userFilePath}");
                 }
                 else
                 {
-                    Console.WriteLine($"Common paint file does not exist: {commonPaintFilePath}");
+                    Console.WriteLine($"Common file does not exist: {commonFilePath}");
                 }
             }
             catch (UnauthorizedAccessException e)
             {
                 Console.WriteLine($"Access denied. Cannot write to the paint file: {e.Message}");
-            }
-            catch (PathTooLongException e)
-            {
-                Console.WriteLine($"The specified path is too long: {e.Message}");
-            }
-            catch (DirectoryNotFoundException e)
-            {
-                Console.WriteLine($"The specified directory was not found: {e.Message}");
-            }
-            catch (IOException e)
-            {
-                Console.WriteLine($"An I/O error occurred while copying the file: {e.Message}");
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"An unexpected error occurred: {e.Message}");
-            }
-        }
-
-        static void CopyHelmet(int userID)
-        {
-            try
-            {
-                // Common helmet
-                const string commonHelmet = "helmet_common.tga";
-                string commonHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", "common", commonHelmet);
-
-                // Check if the common helmet file exists
-                if (File.Exists(commonHelmetFilePath))
-                {
-                    // Construct the path to the user-specific helmet file
-                    string userHelmet = $"{userID}.tga";
-                    string userHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", userHelmet);
-
-                    // Copy the common helmet file to the user-specific helmet file, overwriting if it already exists
-                    File.Copy(commonHelmetFilePath, userHelmetFilePath, true);
-                    Console.WriteLine($"Copied common helmet to: {userHelmetFilePath}");
-                }
-                else
-                {
-                    Console.WriteLine($"Common helmet file does not exist: {commonHelmetFilePath}");
-                }
-            }
-            catch (UnauthorizedAccessException e)
-            {
-                Console.WriteLine($"Access denied. Cannot write to the helmet file: {e.Message}");
             }
             catch (PathTooLongException e)
             {
@@ -190,7 +158,7 @@ namespace iRacingEquanimityPaint
                     var key = Console.ReadKey(true).Key;
                     if (key == ConsoleKey.Q)
                     {
-                        break;  // Exit the loop, leading to a program stop.
+                        break;  
                     }
                     else if (key == ConsoleKey.R) 
                     {
@@ -198,7 +166,7 @@ namespace iRacingEquanimityPaint
                         OnSessionInfo();
                     }
                 }
-                await Task.Delay(100, cancellationToken); // wait before checking again
+                await Task.Delay(100, cancellationToken); 
             }
         }
     }

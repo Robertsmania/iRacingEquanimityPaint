@@ -9,6 +9,7 @@ namespace iRacingEquanimityPaint
     class Program
     {
         const int cLoadTimer = 10000;
+        const int cUpdateTimer = 100;
         static IRSDKSharper irsdk = new IRSDKSharper();
         static int subSessionID = 0;
         static int driverCarIdx = 0;
@@ -63,7 +64,7 @@ namespace iRacingEquanimityPaint
         }
 
         // Add new drivers to the cache
-        static void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
+        static async void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
         {
             foreach (var driverModel in currentDriverModels)
             {
@@ -77,49 +78,30 @@ namespace iRacingEquanimityPaint
                 if (!driverCache.ContainsKey(driverModel.UserID))
                 {
                     driverCache.Add(driverModel.UserID, driverModel);
-                    Console.WriteLine($"Added new driver {driverModel.UserID} to cache with car path: {driverModel.CarPath}");
-                    CopyCarPaints(driverModel.UserID, driverModel.CarPath);
-                    CopyDriverPaints(driverModel.UserID);
+                    Console.WriteLine($"Added new driver #{driverModel.CarNumber,2} with car path: {driverModel.CarPath} UserID: {driverModel.UserID}");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga");
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga");
+                    await Task.Delay(cUpdateTimer); //Delay to let iRacing load completely
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
             }
         }
 
-        static void CopyCarPaints(int userID, string carPath)
+        static void CopyPaint(int userID, string carPath, string commonFileName)
         {
-            string commonCarPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_common.tga");
-            string commonNumPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_num_common.tga");
-            string commonDecalPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", "car_decal_common.tga");
-
-            string userCarPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_{userID}.tga");
-            string userNumPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_num_{userID}.tga");
-            string userDecalPaintFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, $"car_decal_{userID}.tga");
+            string userFileName = commonFileName.Replace("common", userID.ToString());
+            string commonFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", commonFileName);
+            string userFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userFileName);
             
-            CopyTexture(commonCarPaintFilePath, userCarPaintFilePath);
-            CopyTexture(commonNumPaintFilePath, userNumPaintFilePath);
-            CopyTexture(commonDecalPaintFilePath, userDecalPaintFilePath);
-        }
-
-        static void CopyDriverPaints(int userID)
-        {
-            string commonHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", "common", "helmet_common.tga");
-            string commonSuitFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "suits", "common", "suit_common.tga");
-
-            string userHelmetFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "helmets", $"{userID}.tga");
-            string userSuitFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", "suits", $"{userID}.tga");
-
-            CopyTexture(commonHelmetFilePath, userHelmetFilePath);
-            CopyTexture(commonSuitFilePath, userSuitFilePath);
-        }
-
-        static void CopyTexture(string commonFilePath, string userFilePath)
-        {
             try
             {
                 if (File.Exists(commonFilePath))
                 {
                     File.Copy(commonFilePath, userFilePath, true);
-                    Console.WriteLine($"Copied common file to: {userFilePath}");
+                    //Console.WriteLine($"Copied common file to: {userFilePath}");
                 }
                 else
                 {

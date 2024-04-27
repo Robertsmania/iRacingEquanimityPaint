@@ -10,6 +10,7 @@ namespace iRacingEquanimityPaint
     {
         const int cLoadTimer = 10000;
         const int cUpdateTimer = 100;
+        static bool iRacingConnected = false;
         static IRSDKSharper irsdk = new IRSDKSharper();
         static int subSessionID = 0;
         static int driverCarIdx = 0;
@@ -19,7 +20,9 @@ namespace iRacingEquanimityPaint
         static async Task Main(string[] args)
         {
             var cancellationTokenSource = new CancellationTokenSource();
-            irsdk.OnSessionInfo += OnSessionInfo;  
+            irsdk.OnSessionInfo += OnSessionInfo;
+            irsdk.OnConnected += OnConnected;
+            irsdk.OnDisconnected += OnDisconnected;
 
             irsdk.Start();  
 
@@ -45,6 +48,18 @@ namespace iRacingEquanimityPaint
                 cancellationTokenSource.Dispose();
             }
         }
+
+        static async void OnConnected()
+        {
+            iRacingConnected = true;
+            Console.WriteLine("Connected to iRacing");
+        }
+
+        static async void OnDisconnected()
+        {
+            iRacingConnected = false;
+            Console.WriteLine("Disconnected from iRacing");
+        }        
 
         static async void OnSessionInfo()
         {
@@ -144,8 +159,16 @@ namespace iRacingEquanimityPaint
                     }
                     else if (key == ConsoleKey.R) 
                     {
-                        subSessionID = 0;
-                        OnSessionInfo();
+                        if (iRacingConnected)
+                        {
+                            Console.WriteLine("Forcing a re-run.");
+                            subSessionID = 0;
+                            OnSessionInfo();
+                        }
+                        else
+                        {
+                            Console.WriteLine("Not connected to iRacing.");
+                        }
                     }
                 }
                 await Task.Delay(100, cancellationToken); 

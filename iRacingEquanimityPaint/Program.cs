@@ -112,6 +112,11 @@ namespace iRacingEquanimityPaint
 
         static async void OnSessionInfo()
         {
+            if (userOptions.OnlyRaces && irsdk.Data.SessionInfo.WeekendInfo.EventType != "Race") 
+            { 
+                return; 
+            }
+
             //var startTime = DateTime.Now;
             //Console.WriteLine($"Session data updated - {startTime}");
             await updateSemaphore.WaitAsync();
@@ -307,6 +312,7 @@ namespace iRacingEquanimityPaint
             public int SpecMapPercentageChance { set; get; } = 100;
             public bool DeletePaintsFolder { set; get; } = false;
             public bool CarSpecificHelmetSuit { set; get; } = false;
+            public bool OnlyRaces { get; set; } = true;
             public Options()
             {
             }

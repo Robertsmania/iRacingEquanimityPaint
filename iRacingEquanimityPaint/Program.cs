@@ -35,8 +35,20 @@ namespace iRacingEquanimityPaint
             Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n"); 
 
             userOptions = LoadOptions();
-
             var cancellationTokenSource = new CancellationTokenSource();
+
+            Console.CancelKeyPress += (sender, eventArgs) =>
+            {
+                Console.WriteLine("Ctrl+C detected. Cleaning up...");
+                CleanUp();
+            };
+
+            AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) =>
+            {
+                Console.WriteLine("Process exit detected. Cleaning up...");
+                CleanUp();
+            };
+
             irsdk.OnSessionInfo += OnSessionInfo;
             irsdk.OnConnected += OnConnected;
             irsdk.OnDisconnected += OnDisconnected;
@@ -54,6 +66,7 @@ namespace iRacingEquanimityPaint
             catch (OperationCanceledException)
             {
                 Console.WriteLine("Exiting gracefully...");
+                CleanUp();
             }
             finally
             {
@@ -76,14 +89,26 @@ namespace iRacingEquanimityPaint
             iRacingConnected = false;
             Console.WriteLine("\nDisconnected from iRacing");
 
+            CleanUp();
+        }        
+
+        static void CleanUp()
+        {
             //Forget about the previous session and clear out paints
             if (userOptions.DeletePaintsFolder)
             {
                 subSessionID = 0;
-                Directory.Delete(Path.Combine(documentsFolderPath, "iRacing", "paint"), true);
-                Console.WriteLine("Deleted paints folder");
+                try
+                {
+                    Directory.Delete(Path.Combine(documentsFolderPath, "iRacing", "paint"), true);
+                    Console.WriteLine("Deleted paints folder");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Could not delete paints folder: {ex.Message}");
+                }
             }
-        }        
+        }
 
         static async void OnSessionInfo()
         {

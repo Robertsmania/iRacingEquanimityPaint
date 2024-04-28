@@ -3,22 +3,39 @@
  * All Rights Reserved
  */
 using HerboldRacing; //IRSDKSharper
+using System.Text.Json;
+using System.IO;
+using static iRacingEquanimityPaint.Program;
+using System.Reflection;
 
 namespace iRacingEquanimityPaint
 {
     class Program
     {
-        const int cLoadTimer = 10000;
+        const int cLoadTimer = 2000;
         const int cUpdateTimer = 100;
+
+        static Options userOptions = new Options();
         static bool iRacingConnected = false;
+        static SemaphoreSlim updateSemaphore = new SemaphoreSlim(1, 1);
+
         static IRSDKSharper irsdk = new IRSDKSharper();
         static int subSessionID = 0;
         static int driverCarIdx = 0;
         static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
+
         static string documentsFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        static Random random = new Random();
+        static bool useSpecMap = true;
 
         static async Task Main(string[] args)
         {
+            Console.WriteLine("iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
+            Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n"); 
+
+            userOptions = LoadOptions();
+
             var cancellationTokenSource = new CancellationTokenSource();
             irsdk.OnSessionInfo += OnSessionInfo;
             irsdk.OnConnected += OnConnected;
@@ -28,9 +45,6 @@ namespace iRacingEquanimityPaint
 
             // Start an asynchronous task to monitor for quit key press
             var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
-
-            Console.WriteLine("iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
-            Console.WriteLine("Use Ctrl-R in game to force the paints to update."); 
 
             try
             {
@@ -49,37 +63,59 @@ namespace iRacingEquanimityPaint
             }
         }
 
-        static async void OnConnected()
+        static void OnConnected()
         {
             iRacingConnected = true;
-            Console.WriteLine("Connected to iRacing");
+            Console.WriteLine("\nConnected to iRacing");
+
+            UseRandomSpecMap();
         }
 
-        static async void OnDisconnected()
+        static void OnDisconnected()
         {
             iRacingConnected = false;
-            Console.WriteLine("Disconnected from iRacing");
+            Console.WriteLine("\nDisconnected from iRacing");
+
+            //Forget about the previous session and clear out paints
+            if (userOptions.DeletePaintsFolder)
+            {
+                subSessionID = 0;
+                Directory.Delete(Path.Combine(documentsFolderPath, "iRacing", "paint"), true);
+                Console.WriteLine("Deleted paints folder");
+            }
         }        
 
         static async void OnSessionInfo()
         {
-            var thisSubSessionID = irsdk.Data.SessionInfo.WeekendInfo.SubSessionID;
-            var driverInfo = irsdk.Data.SessionInfo.DriverInfo.Drivers;
-            driverCarIdx = irsdk.Data.SessionInfo.DriverInfo.DriverCarIdx;
-
-            if (subSessionID != thisSubSessionID)
+            //var startTime = DateTime.Now;
+            //Console.WriteLine($"Session data updated - {startTime}");
+            await updateSemaphore.WaitAsync();
+            try
             {
-                subSessionID = thisSubSessionID;
-                Console.WriteLine($"New Session! {thisSubSessionID}");
-                driverCache.Clear();
-                await Task.Delay(cLoadTimer); //Delay to let iRacing load completely
+                var thisSubSessionID = irsdk.Data.SessionInfo.WeekendInfo.SubSessionID;
+                var driverInfo = irsdk.Data.SessionInfo.DriverInfo.Drivers;
+                driverCarIdx = irsdk.Data.SessionInfo.DriverInfo.DriverCarIdx;
+                if (subSessionID != thisSubSessionID)
+                {
+                    subSessionID = thisSubSessionID;
+                    Console.WriteLine($"\nNew Session! {thisSubSessionID}");
+                    driverCache.Clear();
+                    await Task.Delay(cLoadTimer); //Delay to let iRacing load completely
+                }
+                //Console.WriteLine($"Updating driver cache - {startTime}");
+                await UpdateDriverCache(driverInfo);
             }
-
-            UpdateDriverCache(driverInfo);
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"Error handing session update: {ex.Message}");
+            }
+            finally
+            {
+                updateSemaphore.Release();
+            }
         }
 
-        // Add new drivers to the cache
-        static async void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
+        static async Task UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
         {
             foreach (var driverModel in currentDriverModels)
             {
@@ -94,23 +130,27 @@ namespace iRacingEquanimityPaint
                 {
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver #{driverModel.CarNumber,2} with car path: {driverModel.CarPath} UserID: {driverModel.UserID}");
+                    if (useSpecMap)
+                    {
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                    }
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga");
-                    await Task.Delay(cUpdateTimer); //Delay to let iRacing load completely
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", !userOptions.CarSpecificHelmetSuit ? "helmet" : null);
+                    CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", !userOptions.CarSpecificHelmetSuit ? "suit" : null);
+                    await Task.Delay(cUpdateTimer); //Delay to avoid texture reload spamming  
                     irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
                 }
             }
         }
 
-        static void CopyPaint(int userID, string carPath, string commonFileName)
+        static void CopyPaint(int userID, string carPath, string commonFileName, string? commonPath = null)
         {
             string userFileName = commonFileName.Replace("common", userID.ToString());
-            string commonFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, "common", commonFileName);
+            string commonFilePath = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", commonPath ?? carPath, commonFileName);
             string userFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userFileName);
-            
+
             try
             {
                 if (File.Exists(commonFilePath))
@@ -161,7 +201,9 @@ namespace iRacingEquanimityPaint
                     {
                         if (iRacingConnected)
                         {
-                            Console.WriteLine("Forcing a re-run.");
+                            Console.WriteLine("\nForcing a re-run.");
+                            userOptions = LoadOptions();
+                            UseRandomSpecMap();
                             subSessionID = 0;
                             OnSessionInfo();
                         }
@@ -172,6 +214,76 @@ namespace iRacingEquanimityPaint
                     }
                 }
                 await Task.Delay(100, cancellationToken); 
+            }
+        }
+
+        static void UseRandomSpecMap()
+        {
+            int chance = random.Next(100);
+            // Determine whether to use the spec map based on SpecMapPercentageChance.
+            useSpecMap = chance < userOptions.SpecMapPercentageChance;
+            Console.WriteLine($"\nUse Spec Map: {useSpecMap}");
+        }
+
+        public static Options LoadOptions()
+        {
+            string fileName = "Options.json";
+            string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+            Options loadOptions = new Options();
+
+            if (File.Exists(fileName))
+            {
+                try
+                {
+                    string json = File.ReadAllText(configPath);
+                    loadOptions = JsonSerializer.Deserialize<Options>(json);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading {fileName} configuration. Using defaults. Error: {ex.Message}");
+                    loadOptions = new Options(); 
+                    SaveOptions(loadOptions, configPath);
+                }
+            }
+            else
+            {
+                Console.WriteLine($"No {fileName} file found. Using defaults.");
+                loadOptions = new Options();
+                SaveOptions(loadOptions, configPath);
+            }
+
+            Console.WriteLine($"Options:");
+            foreach (PropertyInfo property in loadOptions.GetType().GetProperties())
+            {
+                // Get the value of the property
+                var value = property.GetValue(loadOptions, null);
+                Console.WriteLine($"{property.Name}: {value}");
+            }
+            return loadOptions;
+        }
+
+        public static void SaveOptions(Options options, string configPath)
+        {
+            try
+            {
+                string json = JsonSerializer.Serialize(options, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(configPath, json);
+                Console.WriteLine($"Default configuration saved to {configPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed to save default configuration. Error: " + ex.Message);
+            }
+        }
+
+
+        public struct Options
+        {
+            public int SpecMapPercentageChance { set; get; } = 100;
+            public bool DeletePaintsFolder { set; get; } = false;
+            public bool CarSpecificHelmetSuit { set; get; } = false;
+            public Options()
+            {
             }
         }
     }

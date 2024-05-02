@@ -186,14 +186,31 @@ namespace iRacingEquanimityPaint
             {
                 if (File.Exists(commonFilePath))
                 {
+                    // Ceate the userFolderPath if necessary
                     if (!Directory.Exists(userFolderPath))
                     {
                         Directory.CreateDirectory(userFolderPath);
                         Console.WriteLine($"Created directory: {userFolderPath}");
                     }
 
+                    // Check if the destination file exists and is read-only
+                    if (File.Exists(userFilePath))
+                    {
+                        // Remove read-only attribute to overwrite
+                        FileAttributes attributes = File.GetAttributes(userFilePath);
+                        if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                        {
+                            File.SetAttributes(userFilePath, attributes & ~FileAttributes.ReadOnly);
+                            //Console.WriteLine($"Removed read-only attribute from: {userFilePath}");
+                        }
+                    }
+
                     File.Copy(commonFilePath, userFilePath, true);
                     //Console.WriteLine($"Copied common file to: {userFilePath}");
+
+                    // Set the copied file to read-only
+                    File.SetAttributes(userFilePath, File.GetAttributes(userFilePath) | FileAttributes.ReadOnly);
+                    //Console.WriteLine($"Set file as read-only: {userFilePath}");
                 }
                 else
                 {

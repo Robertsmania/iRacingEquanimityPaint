@@ -164,6 +164,10 @@ namespace iRacingEquanimityPaint
                     {
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
                     }
+                    else
+                    {
+                        DeletePaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                    }
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
@@ -236,6 +240,46 @@ namespace iRacingEquanimityPaint
             catch (Exception e)
             {
                 Console.WriteLine($"An unexpected error occurred: {e.Message}");
+            }
+        }
+
+        static void DeletePaint(int userID, string carPath, string commonFileName)
+        {
+            string userFileName = commonFileName.Replace("common", userID.ToString());
+            string userFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userFileName);
+
+            try
+            {
+                if (File.Exists(userFilePath))
+                {
+                    // Remove read-only attribute if it's set
+                    FileAttributes attributes = File.GetAttributes(userFilePath);
+                    if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                    {
+                        File.SetAttributes(userFilePath, attributes & ~FileAttributes.ReadOnly);
+                        //Console.WriteLine($"Removed read-only attribute from: {userFilePath}");
+                    }
+
+                    // Delete the file
+                    File.Delete(userFilePath);
+                    //Console.WriteLine($"Deleted file: {userFilePath}");
+                }
+                else
+                {
+                    //Console.WriteLine($"File does not exist and cannot be deleted: {userFilePath}");
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Console.WriteLine($"Access denied. Cannot delete the paint file: {ex.Message}");
+            }
+            catch (IOException ex)
+            {
+                Console.WriteLine($"An I/O error occurred while deleting the file: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
             }
         }
 

@@ -180,11 +180,18 @@ namespace iRacingEquanimityPaint
             string userFileName = commonFileName.Replace("common", userID.ToString());
             string commonFilePath = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", commonPath ?? carPath, commonFileName);
             string userFilePath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath, userFileName);
+            string userFolderPath = Path.Combine(documentsFolderPath, "iRacing", "paint", carPath);
 
             try
             {
                 if (File.Exists(commonFilePath))
                 {
+                    if (!Directory.Exists(userFolderPath))
+                    {
+                        Directory.CreateDirectory(userFolderPath);
+                        Console.WriteLine($"Created directory: {userFolderPath}");
+                    }
+
                     File.Copy(commonFilePath, userFilePath, true);
                     //Console.WriteLine($"Copied common file to: {userFilePath}");
                 }

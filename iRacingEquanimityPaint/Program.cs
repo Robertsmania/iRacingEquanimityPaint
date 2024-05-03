@@ -31,10 +31,11 @@ namespace iRacingEquanimityPaint
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
+            Console.WriteLine("Robertsmania iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
             Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n"); 
 
             userOptions = LoadOptions();
+            CleanUp();
             var cancellationTokenSource = new CancellationTokenSource();
 
             Console.CancelKeyPress += (sender, eventArgs) =>
@@ -100,14 +101,43 @@ namespace iRacingEquanimityPaint
                 subSessionID = 0;
                 try
                 {
-                    Directory.Delete(Path.Combine(documentsFolderPath, "iRacing", "paint"), true);
+                    string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
+                    RemoveReadOnlyAttributes(paintFolder);
+                    Directory.Delete(paintFolder, true);
                     Console.WriteLine("Deleted paints folder");
+                }
+                catch (DirectoryNotFoundException e)
+                {
+                    Console.WriteLine("No paints folder to delete.");
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Could not delete paints folder: {ex.Message}");
                 }
             }
+        }
+
+        static void RemoveReadOnlyAttributes(string directoryPath)
+        {
+            // Check if the directory exists
+            if (!Directory.Exists(directoryPath))
+                return;
+
+            // Remove read-only attribute from all files in the directory
+            var fileEntries = Directory.GetFiles(directoryPath);
+            foreach (var file in fileEntries)
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                {
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+                }
+            }
+
+            // Recurse into subdirectories
+            var subdirectoryEntries = Directory.GetDirectories(directoryPath);
+            foreach (var subdirectory in subdirectoryEntries)
+                RemoveReadOnlyAttributes(subdirectory);
         }
 
         static async void OnSessionInfo()
@@ -301,6 +331,7 @@ namespace iRacingEquanimityPaint
                         {
                             Console.WriteLine("\nForcing a re-run.");
                             userOptions = LoadOptions();
+                            CleanUp();
                             UseRandomSpecMap();
                             subSessionID = 0;
                             OnSessionInfo();

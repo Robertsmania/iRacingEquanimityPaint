@@ -91,29 +91,28 @@ namespace iRacingEquanimityPaint
             Console.WriteLine("\nDisconnected from iRacing");
 
             CleanUp();
-        }        
+        }
 
         static void CleanUp()
         {
-            //Forget about the previous session and clear out paints
-            if (userOptions.DeletePaintsFolder)
+            subSessionID = 0;
+            string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
+            try
             {
-                subSessionID = 0;
-                try
+                RemoveReadOnlyAttributes(paintFolder);
+                if (userOptions.DeletePaintsFolder)
                 {
-                    string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
-                    RemoveReadOnlyAttributes(paintFolder);
                     Directory.Delete(paintFolder, true);
                     Console.WriteLine("Deleted paints folder");
                 }
-                catch (DirectoryNotFoundException e)
-                {
-                    Console.WriteLine("No paints folder to delete.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Could not delete paints folder: {ex.Message}");
-                }
+            }
+            catch (DirectoryNotFoundException e)
+            {
+                Console.WriteLine("No paints folder.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Could not clean up paints folder: {ex.Message}");
             }
         }
 

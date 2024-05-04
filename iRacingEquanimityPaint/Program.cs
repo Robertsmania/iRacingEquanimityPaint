@@ -330,7 +330,6 @@ namespace iRacingEquanimityPaint
                         {
                             Console.WriteLine("\nForcing a re-run.");
                             userOptions = LoadOptions();
-                            CleanUp();
                             UseRandomSpecMap();
                             subSessionID = 0;
                             OnSessionInfo();

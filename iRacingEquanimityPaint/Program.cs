@@ -215,6 +215,8 @@ namespace iRacingEquanimityPaint
 
                     File.Copy(commonFilePath, userFilePath, true);
                     //Console.WriteLine($"Copied common file to: {userFilePath}");
+                    File.SetLastWriteTime(userFilePath, DateTime.Now);
+
                 }
                 else
                 {

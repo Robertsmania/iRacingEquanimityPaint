@@ -4,30 +4,28 @@
  */
 using HerboldRacing; //IRSDKSharper
 using System.Text.Json;
-using System.IO;
-using static iRacingEquanimityPaint.Program;
 using System.Reflection;
 
 namespace iRacingEquanimityPaint
 {
     class Program
     {
-        const int cLoadTimer = 2000;
-        const int cUpdateTimer = 100;
-
-        static Options userOptions = new Options();
-        static bool iRacingConnected = false;
-        static SemaphoreSlim updateSemaphore = new SemaphoreSlim(1, 1);
-
-        static IRSDKSharper irsdk = new IRSDKSharper();
-        static int subSessionID = 0;
-        static int driverCarIdx = 0;
-        static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
+        const int cTextureUpdateTimer = 500;
 
         static string documentsFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-        static Random random = new Random();
+        static bool iRacingConnected = false;
         static bool useSpecMap = true;
+        static Random random = new Random();
+        static Options userOptions = new Options();
+
+        static SemaphoreSlim sessionUpdateSemaphore = new SemaphoreSlim(1, 1);
+        static SemaphoreSlim textureUpdateSemaphore = new SemaphoreSlim(1, 1);
+
+        static int subSessionID = 0;
+        static int driverCarIdx = 0;
+        static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
+        static IRSDKSharper irsdk = new IRSDKSharper();
 
         static async Task Main(string[] args)
         {
@@ -58,7 +56,6 @@ namespace iRacingEquanimityPaint
 
             // Start an asynchronous task to monitor for quit key press
             var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
-
             try
             {
                 // Wait until the quitTask completes, i.e., when Q is pressed
@@ -93,52 +90,6 @@ namespace iRacingEquanimityPaint
             CleanUp();
         }
 
-        static void CleanUp()
-        {
-            subSessionID = 0;
-            string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
-            try
-            {
-                RemoveReadOnlyAttributes(paintFolder);
-                if (userOptions.DeletePaintsFolder)
-                {
-                    Directory.Delete(paintFolder, true);
-                    Console.WriteLine("Deleted paints folder");
-                }
-            }
-            catch (DirectoryNotFoundException e)
-            {
-                Console.WriteLine("No paints folder.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Could not clean up paints folder: {ex.Message}");
-            }
-        }
-
-        static void RemoveReadOnlyAttributes(string directoryPath)
-        {
-            // Check if the directory exists
-            if (!Directory.Exists(directoryPath))
-                return;
-
-            // Remove read-only attribute from all files in the directory
-            var fileEntries = Directory.GetFiles(directoryPath);
-            foreach (var file in fileEntries)
-            {
-                var attributes = File.GetAttributes(file);
-                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
-                {
-                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
-                }
-            }
-
-            // Recurse into subdirectories
-            var subdirectoryEntries = Directory.GetDirectories(directoryPath);
-            foreach (var subdirectory in subdirectoryEntries)
-                RemoveReadOnlyAttributes(subdirectory);
-        }
-
         static async void OnSessionInfo()
         {
             if (userOptions.OnlyRaces && irsdk.Data.SessionInfo.WeekendInfo.EventType != "Race") 
@@ -148,7 +99,7 @@ namespace iRacingEquanimityPaint
 
             //var startTime = DateTime.Now;
             //Console.WriteLine($"Session data updated - {startTime}");
-            await updateSemaphore.WaitAsync();
+            await sessionUpdateSemaphore.WaitAsync();
             try
             {
                 var thisSubSessionID = irsdk.Data.SessionInfo.WeekendInfo.SubSessionID;
@@ -159,10 +110,9 @@ namespace iRacingEquanimityPaint
                     subSessionID = thisSubSessionID;
                     Console.WriteLine($"\nNew Session! {thisSubSessionID}");
                     driverCache.Clear();
-                    await Task.Delay(cLoadTimer); //Delay to let iRacing load completely
                 }
                 //Console.WriteLine($"Updating driver cache - {startTime}");
-                await UpdateDriverCache(driverInfo);
+                UpdateDriverCache(driverInfo);
             }
             catch (Exception ex) 
             {
@@ -170,11 +120,11 @@ namespace iRacingEquanimityPaint
             }
             finally
             {
-                updateSemaphore.Release();
+                sessionUpdateSemaphore.Release();
             }
         }
 
-        static async Task UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
+        static void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
         {
             foreach (var driverModel in currentDriverModels)
             {
@@ -202,9 +152,34 @@ namespace iRacingEquanimityPaint
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", !userOptions.CarSpecificHelmetSuit ? "helmet" : null);
                     CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", !userOptions.CarSpecificHelmetSuit ? "suit" : null);
-                    await Task.Delay(cUpdateTimer); //Delay to avoid texture reload spamming  
-                    irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, driverModel.CarIdx);
+                    //Request texture reload, but dont wait - they will qeueu up...
+                    RequestTextureReload(driverModel.CarIdx).ConfigureAwait(false);
                 }
+            }
+        }
+
+        static async Task RequestTextureReload(int carIdx)
+        {
+            // Wait to enter the semaphore
+            await textureUpdateSemaphore.WaitAsync();
+            try
+            {
+                // Delay before executing the reload to prevent spamming
+                await Task.Delay(cTextureUpdateTimer);
+
+                // Call the iRacing SDK to reload textures for the specific car
+                irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, carIdx);
+                //Console.WriteLine($"Requested texture reload for car index: {carIdx}");
+            }
+            catch (Exception ex)
+            {
+                // Handle exceptions that might occur during the reload request
+                Console.WriteLine($"Error during texture reload for car index {carIdx}: {ex.Message}");
+            }
+            finally
+            {
+                // Release the semaphore to allow the next queued task to proceed
+                textureUpdateSemaphore.Release();
             }
         }
 
@@ -240,10 +215,6 @@ namespace iRacingEquanimityPaint
 
                     File.Copy(commonFilePath, userFilePath, true);
                     //Console.WriteLine($"Copied common file to: {userFilePath}");
-
-                    // Set the copied file to read-only
-                    File.SetAttributes(userFilePath, File.GetAttributes(userFilePath) | FileAttributes.ReadOnly);
-                    //Console.WriteLine($"Set file as read-only: {userFilePath}");
                 }
                 else
                 {
@@ -312,44 +283,58 @@ namespace iRacingEquanimityPaint
             }
         }
 
-        // Asynchronously wait for the user to press 'Q' to quit or 'R' to re-run
-        static async Task MonitorUserInputAsync(CancellationToken cancellationToken)
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                if (Console.KeyAvailable)
-                {
-                    var key = Console.ReadKey(true).Key;
-                    if (key == ConsoleKey.Q)
-                    {
-                        break;  
-                    }
-                    else if (key == ConsoleKey.R) 
-                    {
-                        if (iRacingConnected)
-                        {
-                            Console.WriteLine("\nForcing a re-run.");
-                            userOptions = LoadOptions();
-                            UseRandomSpecMap();
-                            subSessionID = 0;
-                            OnSessionInfo();
-                        }
-                        else
-                        {
-                            Console.WriteLine("Not connected to iRacing.");
-                        }
-                    }
-                }
-                await Task.Delay(100, cancellationToken); 
-            }
-        }
-
         static void UseRandomSpecMap()
         {
             int chance = random.Next(100);
             // Determine whether to use the spec map based on SpecMapPercentageChance.
             useSpecMap = chance < userOptions.SpecMapPercentageChance;
             Console.WriteLine($"\nUse Spec Map: {useSpecMap}");
+        }
+
+        static void CleanUp()
+        {
+            if (userOptions.DeletePaintsFolder)
+            {
+                try
+                {
+                    subSessionID = 0;
+                    string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
+                    RemoveReadOnlyAttributes(paintFolder);
+                    Directory.Delete(paintFolder, true);
+                    Console.WriteLine("Deleted paints folder");
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    Console.WriteLine("No paints folder.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Could not clean up paints folder: {ex.Message}");
+                }
+            }
+        }
+
+        static void RemoveReadOnlyAttributes(string directoryPath)
+        {
+            // Check if the directory exists
+            if (!Directory.Exists(directoryPath))
+                return;
+
+            // Remove read-only attribute from all files in the directory
+            var fileEntries = Directory.GetFiles(directoryPath);
+            foreach (var file in fileEntries)
+            {
+                var attributes = File.GetAttributes(file);
+                if ((attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                {
+                    File.SetAttributes(file, attributes & ~FileAttributes.ReadOnly);
+                }
+            }
+
+            // Recurse into subdirectories
+            var subdirectoryEntries = Directory.GetDirectories(directoryPath);
+            foreach (var subdirectory in subdirectoryEntries)
+                RemoveReadOnlyAttributes(subdirectory);
         }
 
         public static Options LoadOptions()
@@ -403,6 +388,37 @@ namespace iRacingEquanimityPaint
             }
         }
 
+        // Asynchronously wait for the user to press 'Q' to quit or 'R' to re-run
+        static async Task MonitorUserInputAsync(CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                if (Console.KeyAvailable)
+                {
+                    var key = Console.ReadKey(true).Key;
+                    if (key == ConsoleKey.Q)
+                    {
+                        break;  
+                    }
+                    else if (key == ConsoleKey.R) 
+                    {
+                        if (iRacingConnected)
+                        {
+                            Console.WriteLine("\nForcing a re-run.");
+                            userOptions = LoadOptions();
+                            UseRandomSpecMap();
+                            subSessionID = 0;
+                            OnSessionInfo();
+                        }
+                        else
+                        {
+                            Console.WriteLine("Not connected to iRacing.");
+                        }
+                    }
+                }
+                await Task.Delay(100, cancellationToken); 
+            }
+        }
 
         public struct Options
         {

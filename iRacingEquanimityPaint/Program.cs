@@ -178,6 +178,7 @@ namespace iRacingEquanimityPaint
                     if (userOptions.RandomMode)
                     {
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga", "random_selection");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", "random_selection");
@@ -362,8 +363,9 @@ namespace iRacingEquanimityPaint
 
             Dictionary<string, string> categories = new Dictionary<string, string>
             {
-                { "livery", "car_common.tga" },
-                { "spec", "car_spec_common.mip" },
+                { "car", "car_common.tga" },
+                { "car_num", "car_num_common.tga" },
+                { "car_spec", "car_spec_common.mip" },
                 { "helmet", "helmet_common.tga" },
                 { "suit", "suit_common.tga" }
             };

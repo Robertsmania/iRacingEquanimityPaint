@@ -30,89 +30,77 @@ namespace iRacingEquanimityPaint
 
         static async Task Main(string[] args)
         {
-            SetupLogging();
-            userOptions = LoadOptions();
+            const string appName = "iRacingEquanimityPaint";
+            bool createdNew;
 
-            Console.WriteLine("Robertsmania iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
-            Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n"); 
-
-            CleanUp();
-            var cancellationTokenSource = new CancellationTokenSource();
-
-            Console.CancelKeyPress += (sender, eventArgs) =>
+            using (Mutex mutex = new Mutex(initiallyOwned: true, name: appName, out createdNew))
             {
-                if (!userOptions.QuitAfterCopy)
+                if (!createdNew)
                 {
-                    Console.WriteLine("Ctrl+C detected. Cleaning up...");
-                    CleanUp();
+                    Console.WriteLine($"Only one instance of {appName} can be running at a time.");
+                    return;
                 }
-            };
 
-            AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) =>
-            {
-                if (!userOptions.QuitAfterCopy)
+                Console.WriteLine("\nRobertsmania iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
+                Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n");
+
+                SetupLogging();
+                userOptions = LoadOptions();
+
+                if (userOptions.RandomMode)
                 {
-                    Console.WriteLine("Process exit detected. Cleaning up...");
-                    CleanUp();
+                    SetupRandomFiles();
                 }
-            };
 
-            irsdk.OnSessionInfo += OnSessionInfo;
-            irsdk.OnConnected += OnConnected;
-            irsdk.OnDisconnected += OnDisconnected;
+                CleanUp();
+                var cancellationTokenSource = new CancellationTokenSource();
 
-            irsdk.Start();  
-
-            // Start an asynchronous task to monitor for quit key press
-            var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
-            try
-            {
-                // Wait until the quitTask completes, i.e., when Q is pressed
-                await quitTask;
-            }
-            catch (OperationCanceledException)
-            {
-                Console.WriteLine("Exiting gracefully...");
-                if (!userOptions.QuitAfterCopy)
+                Console.CancelKeyPress += (sender, eventArgs) =>
                 {
-                    CleanUp();
+                    if (!userOptions.QuitAfterCopy)
+                    {
+                        Console.WriteLine("\nCtrl+C detected. Cleaning up...");
+                        CleanUp();
+                    }
+                };
+
+                AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) =>
+                {
+                    if (!userOptions.QuitAfterCopy)
+                    {
+                        Console.WriteLine("\nProcess exit detected. Cleaning up...");
+                        CleanUp();
+                    }
+                };
+
+                Console.WriteLine("\nWaiting for iRacing.");
+                irsdk.OnSessionInfo += OnSessionInfo;
+                irsdk.OnConnected += OnConnected;
+                irsdk.OnDisconnected += OnDisconnected;
+
+                irsdk.Start();
+
+                // Start an asynchronous task to monitor for quit key press
+                var quitTask = MonitorUserInputAsync(cancellationTokenSource.Token);
+                try
+                {
+                    // Wait until the quitTask completes, i.e., when Q is pressed
+                    await quitTask;
                 }
-            }
-            finally
-            {
-                irsdk.Stop();  
-                cancellationTokenSource.Cancel();
-                cancellationTokenSource.Dispose();
-            }
-        }
-
-        static void SetupLogging()
-        {
-            string logDirectoryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-            Directory.CreateDirectory(logDirectoryPath);
-
-            string dateTimeStamp = DateTime.Now.ToString("yyMMdd_HHmmss");
-            logFileName = Path.Combine(logDirectoryPath, $"irEP_{dateTimeStamp}.txt");
-
-            //Log("irEP Logging started.");
-        }
-
-        static void Log(string message)
-        {
-            Console.WriteLine(message);
-
-            if (!userOptions.LogToFile || string.IsNullOrEmpty(logFileName))
-            {
-                return;
-            }
-            try
-            {
-                string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}\n";
-                File.AppendAllText(logFileName, logEntry);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to write to log file: {ex.Message}");
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine("Exiting gracefully...");
+                    if (!userOptions.QuitAfterCopy)
+                    {
+                        CleanUp();
+                    }
+                }
+                finally
+                {
+                    irsdk.Stop();
+                    cancellationTokenSource.Cancel();
+                    cancellationTokenSource.Dispose();
+                }
             }
         }
 
@@ -121,7 +109,10 @@ namespace iRacingEquanimityPaint
             iRacingConnected = true;
             Console.WriteLine("\nConnected to iRacing");
 
-            UseRandomSpecMap();
+            if (!userOptions.RandomMode)
+            {
+                UseRandomSpecMap();
+            }
         }
 
         static void OnDisconnected()
@@ -183,25 +174,37 @@ namespace iRacingEquanimityPaint
                     driversUpdated = true;
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver #{driverModel.CarNumber,2} with car path: {driverModel.CarPath} UserID: {driverModel.UserID}");
-                    if (useSpecMap)
+
+                    if (userOptions.RandomMode)
                     {
-                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga", "random_selection");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip", "random_selection");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", "random_selection");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", "random_selection");
                     }
                     else
                     {
-                        DeletePaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                        if (useSpecMap)
+                        {
+                            CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                        }
+                        else
+                        {
+                            DeletePaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
+                        }
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", !userOptions.CarSpecificHelmetSuit ? "helmet" : null);
+                        CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", !userOptions.CarSpecificHelmetSuit ? "suit" : null);
                     }
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", !userOptions.CarSpecificHelmetSuit ? "helmet" : null);
-                    CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", !userOptions.CarSpecificHelmetSuit ? "suit" : null);
                     //Request texture reload, but dont wait - they will qeueu up...
                     RequestTextureReload(driverModel.CarIdx).ConfigureAwait(false);
                 }
             }
             if (driversUpdated)
             {
+                //This will exit the program if QuitAfterCopy is true.
                 RequestTextureReload(-1, userOptions.QuitAfterCopy).ConfigureAwait(false);
             }
         }
@@ -215,11 +218,16 @@ namespace iRacingEquanimityPaint
                 Console.WriteLine("\nAll texture updates requested. QuitAfterCopy is true, exiting application...");
                 Environment.Exit(0);
             }
-            else if (carIdx == -1)
+            
+            if (carIdx == -1)
             {
                 Console.WriteLine("\nAll texture updates requested.");
+                // Release the semaphore to allow the next queued task to proceed
+                textureUpdateSemaphore.Release();
                 return;
             }
+
+            //Or actually request the reload...
             try
             {
                 // Delay before executing the reload to prevent spamming
@@ -344,6 +352,50 @@ namespace iRacingEquanimityPaint
             }
         }
 
+        static void SetupRandomFiles()
+        {
+            Console.WriteLine("\nSetting up random files.");
+            string sourceDir = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", "random_source");
+            string targetDir = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", "random_selection");
+            Directory.CreateDirectory(targetDir);  
+
+            Dictionary<string, string> categories = new Dictionary<string, string>
+            {
+                { "livery", "car_common.tga" },
+                { "spec", "car_spec_common.mip" },
+                { "helmet", "helmet_common.tga" },
+                { "suit", "suit_common.tga" }
+            };
+
+            Random rand = new Random();
+
+            foreach (var category in categories)
+            {
+                try
+                {
+                    string sourceFolder = Path.Combine(sourceDir, category.Key);
+                    string[] files = Directory.GetFiles(sourceFolder);
+
+                    if (files.Length == 0)
+                    {
+                        Log($"No files found in {sourceFolder}. Skipping.");
+                        continue;
+                    }
+
+                    // Select a random file
+                    string selectedFile = files[rand.Next(files.Length)];
+                    string targetFile = Path.Combine(targetDir, category.Value);
+                    // Copy the file to the new location with the new name
+                    File.Copy(selectedFile, targetFile, true);
+                    Console.WriteLine($"Copied: {selectedFile} -> {category.Value}.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Error trying to copy: {category.Value} - {ex.Message}");
+                }
+            }
+        }
+
         static void UseRandomSpecMap()
         {
             int chance = random.Next(100);
@@ -362,11 +414,11 @@ namespace iRacingEquanimityPaint
                     string paintFolder = Path.Combine(documentsFolderPath, "iRacing", "paint");
                     RemoveReadOnlyAttributes(paintFolder);
                     Directory.Delete(paintFolder, true);
-                    Console.WriteLine("Deleted paints folder");
+                    //Console.WriteLine("\nDeleted paints folder");
                 }
                 catch (DirectoryNotFoundException)
                 {
-                    Console.WriteLine("No paints folder.");
+                    //Console.WriteLine("\nNo paints folder.");
                 }
                 catch (Exception ex)
                 {
@@ -433,6 +485,11 @@ namespace iRacingEquanimityPaint
                 var value = property.GetValue(loadOptions, null);
                 Console.WriteLine($"{property.Name}: {value}");
             }
+
+            if (loadOptions.RandomMode)
+            {
+                Console.WriteLine("RandomMode is enabled, so CarSpecificHelmetSuit and SpecMapPercentageChance are ignored.");
+            }
             return loadOptions;
         }
 
@@ -468,13 +525,20 @@ namespace iRacingEquanimityPaint
                         {
                             Console.WriteLine("\nForcing a re-run.");
                             userOptions = LoadOptions();
-                            UseRandomSpecMap();
+                            if (userOptions.RandomMode)
+                            {
+                                SetupRandomFiles();
+                            }
+                            else
+                            {
+                                UseRandomSpecMap();
+                            }
                             subSessionID = 0;
                             OnSessionInfo();
                         }
                         else
                         {
-                            Console.WriteLine("Not connected to iRacing.");
+                            Console.WriteLine("\nNot connected to iRacing.");
                         }
                     }
                 }
@@ -482,14 +546,44 @@ namespace iRacingEquanimityPaint
             }
         }
 
+        static void SetupLogging()
+        {
+            string logDirectoryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            Directory.CreateDirectory(logDirectoryPath);
+
+            string dateTimeStamp = DateTime.Now.ToString("yyMMdd_HHmmss");
+            logFileName = Path.Combine(logDirectoryPath, $"irEP_{dateTimeStamp}.txt");
+
+            //Log("irEP Logging started.");
+        }
+
+        static void Log(string message)
+        {
+            Console.WriteLine(message);
+
+            if (!userOptions.LogToFile || string.IsNullOrEmpty(logFileName))
+            {
+                return;
+            }
+            try
+            {
+                string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}\n";
+                File.AppendAllText(logFileName, logEntry);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to write to log file: {ex.Message}");
+            }
+        }
+
         public struct Options
         {
-            public int SpecMapPercentageChance { set; get; } = 100;
-            public bool DeletePaintsFolder { set; get; } = false;
-            public bool CarSpecificHelmetSuit { set; get; } = false;
-            public bool OnlyRaces { get; set; } = true;
             public bool RandomMode { get; set; } = true;
             public bool QuitAfterCopy { get; set; } = true;
+            public bool DeletePaintsFolder { set; get; } = false;
+            public bool OnlyRaces { get; set; } = true;
+            public int SpecMapPercentageChance { set; get; } = 100;
+            public bool CarSpecificHelmetSuit { set; get; } = false;
             public bool LogToFile { get; set; } = true;
             public Options()
             {

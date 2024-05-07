@@ -204,7 +204,8 @@ namespace iRacingEquanimityPaint
             }
             if (driversUpdated)
             {
-                //This will exit the program if QuitAfterCopy is true.
+                Console.Write("Requesting iRacing texture reload for each car: ");
+                //This final one will exit the program if QuitAfterCopy is true.
                 RequestTextureReload(-1, userOptions.QuitAfterCopy).ConfigureAwait(false);
             }
         }
@@ -580,9 +581,9 @@ namespace iRacingEquanimityPaint
         public struct Options
         {
             public bool RandomMode { get; set; } = true;
-            public bool QuitAfterCopy { get; set; } = true;
+            public bool QuitAfterCopy { get; set; } = false;
             public bool DeletePaintsFolder { set; get; } = false;
-            public bool OnlyRaces { get; set; } = true;
+            public bool OnlyRaces { get; set; } = false;
             public int SpecMapPercentageChance { set; get; } = 100;
             public bool CarSpecificHelmetSuit { set; get; } = false;
             public bool LogToFile { get; set; } = true;

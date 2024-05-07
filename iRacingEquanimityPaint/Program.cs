@@ -168,6 +168,7 @@ namespace iRacingEquanimityPaint
 
         static void UpdateDriverCache(List<IRacingSdkSessionInfo.DriverInfoModel.DriverModel> currentDriverModels)
         {
+            bool driversUpdated = false;
             foreach (var driverModel in currentDriverModels)
             {
                 //Don't add "us" or the pace car
@@ -179,6 +180,7 @@ namespace iRacingEquanimityPaint
                 //New here?
                 if (!driverCache.ContainsKey(driverModel.UserID))
                 {
+                    driversUpdated = true;
                     driverCache.Add(driverModel.UserID, driverModel);
                     Console.WriteLine($"Added new driver #{driverModel.CarNumber,2} with car path: {driverModel.CarPath} UserID: {driverModel.UserID}");
                     if (useSpecMap)
@@ -198,16 +200,31 @@ namespace iRacingEquanimityPaint
                     RequestTextureReload(driverModel.CarIdx).ConfigureAwait(false);
                 }
             }
+            if (driversUpdated)
+            {
+                RequestTextureReload(-1, userOptions.QuitAfterCopy).ConfigureAwait(false);
+            }
         }
 
-        static async Task RequestTextureReload(int carIdx)
+        static async Task RequestTextureReload(int carIdx, bool quit = false)
         {
             // Wait to enter the semaphore
             await textureUpdateSemaphore.WaitAsync();
+            if (userOptions.QuitAfterCopy && quit && carIdx == -1) //really sure?
+            {
+                Console.WriteLine("\nAll texture updates requested. QuitAfterCopy is true, exiting application...");
+                Environment.Exit(0);
+            }
+            else if (carIdx == -1)
+            {
+                Console.WriteLine("\nAll texture updates requested.");
+                return;
+            }
             try
             {
                 // Delay before executing the reload to prevent spamming
                 await Task.Delay(cTextureUpdateTimer);
+                Console.Write("*");
 
                 // Call the iRacing SDK to reload textures for the specific car
                 irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.CarIdx, carIdx);
@@ -425,7 +442,7 @@ namespace iRacingEquanimityPaint
             {
                 string json = JsonSerializer.Serialize(options, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(configPath, json);
-                Console.WriteLine($"Default configuration saved to {configPath}");
+                //Console.WriteLine($"Default configuration saved to {configPath}");
             }
             catch (Exception ex)
             {

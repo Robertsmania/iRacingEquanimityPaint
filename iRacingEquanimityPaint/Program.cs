@@ -16,6 +16,7 @@ namespace iRacingEquanimityPaint
 
         static bool iRacingConnected = false;
         static bool useSpecMap = true;
+        static string logFileName = "";
         static Random random = new Random();
         static Options userOptions = new Options();
 
@@ -29,23 +30,31 @@ namespace iRacingEquanimityPaint
 
         static async Task Main(string[] args)
         {
+            SetupLogging();
+            userOptions = LoadOptions();
+
             Console.WriteLine("Robertsmania iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
             Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n"); 
 
-            userOptions = LoadOptions();
             CleanUp();
             var cancellationTokenSource = new CancellationTokenSource();
 
             Console.CancelKeyPress += (sender, eventArgs) =>
             {
-                Console.WriteLine("Ctrl+C detected. Cleaning up...");
-                CleanUp();
+                if (!userOptions.QuitAfterCopy)
+                {
+                    Console.WriteLine("Ctrl+C detected. Cleaning up...");
+                    CleanUp();
+                }
             };
 
             AppDomain.CurrentDomain.ProcessExit += (sender, eventArgs) =>
             {
-                Console.WriteLine("Process exit detected. Cleaning up...");
-                CleanUp();
+                if (!userOptions.QuitAfterCopy)
+                {
+                    Console.WriteLine("Process exit detected. Cleaning up...");
+                    CleanUp();
+                }
             };
 
             irsdk.OnSessionInfo += OnSessionInfo;
@@ -64,13 +73,46 @@ namespace iRacingEquanimityPaint
             catch (OperationCanceledException)
             {
                 Console.WriteLine("Exiting gracefully...");
-                CleanUp();
+                if (!userOptions.QuitAfterCopy)
+                {
+                    CleanUp();
+                }
             }
             finally
             {
                 irsdk.Stop();  
                 cancellationTokenSource.Cancel();
                 cancellationTokenSource.Dispose();
+            }
+        }
+
+        static void SetupLogging()
+        {
+            string logDirectoryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            Directory.CreateDirectory(logDirectoryPath);
+
+            string dateTimeStamp = DateTime.Now.ToString("yyMMdd_HHmmss");
+            logFileName = Path.Combine(logDirectoryPath, $"irEP_{dateTimeStamp}.txt");
+
+            //Log("irEP Logging started.");
+        }
+
+        static void Log(string message)
+        {
+            Console.WriteLine(message);
+
+            if (!userOptions.LogToFile || string.IsNullOrEmpty(logFileName))
+            {
+                return;
+            }
+            try
+            {
+                string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}\n";
+                File.AppendAllText(logFileName, logEntry);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to write to log file: {ex.Message}");
             }
         }
 
@@ -116,7 +158,7 @@ namespace iRacingEquanimityPaint
             }
             catch (Exception ex) 
             {
-                Console.WriteLine($"Error handing session update: {ex.Message}");
+                Log($"Error handling session update: {ex.Message}");
             }
             finally
             {
@@ -174,7 +216,7 @@ namespace iRacingEquanimityPaint
             catch (Exception ex)
             {
                 // Handle exceptions that might occur during the reload request
-                Console.WriteLine($"Error during texture reload for car index {carIdx}: {ex.Message}");
+                Log($"Error during texture reload for car index {carIdx}: {ex.Message}");
             }
             finally
             {
@@ -220,28 +262,28 @@ namespace iRacingEquanimityPaint
                 }
                 else
                 {
-                    Console.WriteLine($"Common file does not exist: {commonFilePath}");
+                    Log($"Common file does not exist: {commonFilePath}");
                 }
             }
             catch (UnauthorizedAccessException e)
             {
-                Console.WriteLine($"Access denied. Cannot write to the paint file: {e.Message}");
+                Log($"Access denied. Cannot write to the paint file: {e.Message}");
             }
             catch (PathTooLongException e)
             {
-                Console.WriteLine($"The specified path is too long: {e.Message}");
+                Log($"The specified path is too long: {e.Message}");
             }
             catch (DirectoryNotFoundException e)
             {
-                Console.WriteLine($"The specified directory was not found: {e.Message}");
+                Log($"The specified directory was not found: {e.Message}");
             }
             catch (IOException e)
             {
-                Console.WriteLine($"An I/O error occurred while copying the file: {e.Message}");
+                Log($"An I/O error occurred while copying the file: {e.Message}");
             }
             catch (Exception e)
             {
-                Console.WriteLine($"An unexpected error occurred: {e.Message}");
+                Log($"An unexpected error occurred: {e.Message}");
             }
         }
 
@@ -273,15 +315,15 @@ namespace iRacingEquanimityPaint
             }
             catch (UnauthorizedAccessException ex)
             {
-                Console.WriteLine($"Access denied. Cannot delete the paint file: {ex.Message}");
+                Log($"Access denied. Cannot delete the paint file: {ex.Message}");
             }
             catch (IOException ex)
             {
-                Console.WriteLine($"An I/O error occurred while deleting the file: {ex.Message}");
+                Log($"An I/O error occurred while deleting the file: {ex.Message}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"An unexpected error occurred: {ex.Message}");
+                Log($"An unexpected error occurred: {ex.Message}");
             }
         }
 
@@ -311,7 +353,7 @@ namespace iRacingEquanimityPaint
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Could not clean up paints folder: {ex.Message}");
+                    Log($"Could not clean up paints folder: {ex.Message}");
                 }
             }
         }
@@ -351,17 +393,18 @@ namespace iRacingEquanimityPaint
                 {
                     string json = File.ReadAllText(configPath);
                     loadOptions = JsonSerializer.Deserialize<Options>(json);
+                    SaveOptions(loadOptions, configPath);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error loading {fileName} configuration. Using defaults. Error: {ex.Message}");
+                    Log($"Error loading {fileName} configuration. Using defaults. Error: {ex.Message}");
                     loadOptions = new Options(); 
                     SaveOptions(loadOptions, configPath);
                 }
             }
             else
             {
-                Console.WriteLine($"No {fileName} file found. Using defaults.");
+                Log($"No {fileName} file found. Using defaults.");
                 loadOptions = new Options();
                 SaveOptions(loadOptions, configPath);
             }
@@ -386,7 +429,7 @@ namespace iRacingEquanimityPaint
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Failed to save default configuration. Error: " + ex.Message);
+                Log("Failed to save default configuration. Error: " + ex.Message);
             }
         }
 
@@ -428,6 +471,9 @@ namespace iRacingEquanimityPaint
             public bool DeletePaintsFolder { set; get; } = false;
             public bool CarSpecificHelmetSuit { set; get; } = false;
             public bool OnlyRaces { get; set; } = true;
+            public bool RandomMode { get; set; } = true;
+            public bool QuitAfterCopy { get; set; } = true;
+            public bool LogToFile { get; set; } = true;
             public Options()
             {
             }

@@ -521,24 +521,25 @@ namespace iRacingEquanimityPaint
                     }
                     else if (key == ConsoleKey.R) 
                     {
+                        Console.WriteLine("\n'R' key pressed.");
+                        userOptions = LoadOptions();
+                        if (userOptions.RandomMode)
+                        {
+                            SetupRandomFiles();
+                        }
+                        else
+                        {
+                            UseRandomSpecMap();
+                        }
                         if (iRacingConnected)
                         {
                             Console.WriteLine("\nForcing a re-run.");
-                            userOptions = LoadOptions();
-                            if (userOptions.RandomMode)
-                            {
-                                SetupRandomFiles();
-                            }
-                            else
-                            {
-                                UseRandomSpecMap();
-                            }
                             subSessionID = 0;
                             OnSessionInfo();
                         }
                         else
                         {
-                            Console.WriteLine("\nNot connected to iRacing.");
+                            Console.WriteLine("\nWaiting for iRacing.");
                         }
                     }
                 }

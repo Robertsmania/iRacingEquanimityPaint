@@ -28,8 +28,19 @@ namespace iRacingEquanimityPaint
         static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
         static IRSDKSharper irsdk = new IRSDKSharper();
 
+        static string startArg = "";
+
         static async Task Main(string[] args)
         {
+            startArg = args?.FirstOrDefault() ?? "";
+
+            if (startArg == "iRacingPaints")
+            {
+                CleanUp();
+                irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.All, 0);
+                return;
+            }
+
             const string appName = "iRacingEquanimityPaint";
             bool createdNew;
 
@@ -177,6 +188,10 @@ namespace iRacingEquanimityPaint
 
                     if (userOptions.RandomMode)
                     {
+                        if (startArg == "RandomPerDriver")
+                        {
+                            SetupRandomFiles();
+                        }
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip", "random_selection");
@@ -365,7 +380,7 @@ namespace iRacingEquanimityPaint
             Dictionary<string, string> categories = new Dictionary<string, string>
             {
                 { "car", "car_common.tga" },
-                { "car_num", "car_num_common.tga" },
+                { "car_num", startArg == "RandomPerDriver" ? "car_common.tga" : "car_num_common.tga" },
                 { "car_spec", "car_spec_common.mip" },
                 { "helmet", "helmet_common.tga" },
                 { "suit", "suit_common.tga" }

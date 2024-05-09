@@ -356,6 +356,7 @@ namespace iRacingEquanimityPaint
 
         static void SetupRandomFiles()
         {
+            CleanUpRandomSelection();
             Console.WriteLine("\nSetting up random files.");
             string sourceDir = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", "random_source");
             string targetDir = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", "random_selection");
@@ -426,6 +427,28 @@ namespace iRacingEquanimityPaint
                 catch (Exception ex)
                 {
                     Log($"Could not clean up paints folder: {ex.Message}");
+                }
+            }
+        }
+
+        static void CleanUpRandomSelection()
+        {
+            if (userOptions.RandomMode)
+            {
+                try
+                {
+                    string randomSelectionFolder = Path.Combine(documentsFolderPath, "iRacing", "paintcommon", "random_selection");
+                    RemoveReadOnlyAttributes(randomSelectionFolder);
+                    Directory.Delete(randomSelectionFolder, true);
+                    //Console.WriteLine("\nDeleted random_selected paints folder");
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    //Console.WriteLine("\nNo random_selected paints folder.");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Could not clean up random_selected paints folder: {ex.Message}");
                 }
             }
         }

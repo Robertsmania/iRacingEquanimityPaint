@@ -28,13 +28,10 @@ namespace iRacingEquanimityPaint
         static Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel> driverCache = new Dictionary<int, IRacingSdkSessionInfo.DriverInfoModel.DriverModel>();
         static IRSDKSharper irsdk = new IRSDKSharper();
 
-        static string startArg = "";
-
         static async Task Main(string[] args)
         {
-            startArg = args?.FirstOrDefault() ?? "";
-
-            if (startArg == "iRacingPaints")
+            //Special case reset to iRaingPaints option
+            if (args?.FirstOrDefault() == "iRacingPaints")
             {
                 Console.WriteLine("iRacingPaints command line option - deleting paints and reloading textures.");
                 userOptions.DeletePaintsFolder = true;
@@ -56,9 +53,46 @@ namespace iRacingEquanimityPaint
 
                 Console.WriteLine("\nRobertsmania iRacingEquanimityPaint started. Press Q to quit. R to force a re-run.");
                 Console.WriteLine("Use Ctrl-R in game to force the paints to update.\n");
+                Console.WriteLine("Optional command line arguments: iRacingPaints, RandomMode, RandomPerDriver, IgnoreCarNumFile, QuitAfterCopy, OnlyRaces, DeletePaintsFolder\n");
 
                 SetupLogging();
                 userOptions = LoadOptions();
+
+                foreach (var arg in args ?? Array.Empty<string>())
+
+                    {
+                        if (arg == "RandomMode")
+                    {
+                        Console.WriteLine("Command line argument: RandomMode forced to TRUE for this run.");
+                        userOptions.RandomMode = true;
+                    }
+                    if (arg == "RandomPerDriver")
+                    {
+                        Console.WriteLine("Command line argument: RandomPerDriver forced RandomMode/RandomPerDriver to TRUE for this run.");
+                        userOptions.RandomMode = true;
+                        userOptions.RandomPerDriver = true;
+                    }
+                    else if (arg == "IgnoreCarNumFile")
+                    {
+                        Console.WriteLine("Command line argument: IgnoreCarNumFile forced to TRUE for this run.");
+                        userOptions.IgnoreCarNumFile = true;
+                    }
+                    else if (arg == "QuitAfterCopy")
+                    {
+                        Console.WriteLine("Command line argument: QuitAfterCopy forced to TRUE for this run.");
+                        userOptions.QuitAfterCopy = true;
+                    }
+                    else if (arg == "OnlyRaces")
+                    {
+                        Console.WriteLine("Command line argument: OnlyRaces forced to TRUE for this run.");
+                        userOptions.OnlyRaces = true;
+                    }
+                    else if (arg == "DeletePaintsFolder")
+                    {
+                        Console.WriteLine("Command line argument: DeletePaintsFolder forced to TRUE for this run.");
+                        userOptions.DeletePaintsFolder = true;
+                    }
+                }
 
                 if (userOptions.RandomMode)
                 {
@@ -190,12 +224,19 @@ namespace iRacingEquanimityPaint
 
                     if (userOptions.RandomMode)
                     {
-                        if (startArg == "RandomPerDriver")
+                        if (userOptions.RandomPerDriver)
                         {
                             SetupRandomFiles();
                         }
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga", "random_selection");
-                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga", "random_selection");
+                        if (userOptions.IgnoreCarNumFile)
+                        {
+                            DeletePaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                        }
+                        else
+                        {
+                            CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga", "random_selection");
+                        }
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", "random_selection");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", "random_selection");
@@ -211,7 +252,14 @@ namespace iRacingEquanimityPaint
                             DeletePaint(driverModel.UserID, driverModel.CarPath, "car_spec_common.mip");
                         }
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_common.tga");
-                        CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                        if (userOptions.IgnoreCarNumFile)
+                        {
+                            DeletePaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                        }
+                        else
+                        {
+                            CopyPaint(driverModel.UserID, driverModel.CarPath, "car_num_common.tga");
+                        }
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "car_decal_common.tga");
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "helmet_common.tga", !userOptions.CarSpecificHelmetSuit ? "helmet" : null);
                         CopyPaint(driverModel.UserID, driverModel.CarPath, "suit_common.tga", !userOptions.CarSpecificHelmetSuit ? "suit" : null);
@@ -382,13 +430,16 @@ namespace iRacingEquanimityPaint
             Dictionary<string, string> categories = new Dictionary<string, string>
             {
                 { "car", "car_common.tga" },
-                { "car_num", startArg == "RandomPerDriver" ? "car_common.tga" : "car_num_common.tga" },
+                { "car_num", "car_num_common.tga" },
                 { "car_spec", "car_spec_common.mip" },
                 { "helmet", "helmet_common.tga" },
                 { "suit", "suit_common.tga" }
             };
 
-            Random rand = new Random();
+            if (userOptions.IgnoreCarNumFile)
+            {
+                categories.Remove("car_num");
+            }
 
             foreach (var category in categories)
             {
@@ -404,7 +455,7 @@ namespace iRacingEquanimityPaint
                     }
 
                     // Select a random file
-                    string selectedFile = files[rand.Next(files.Length)];
+                    string selectedFile = files[random.Next(files.Length)];
                     string targetFile = Path.Combine(targetDir, category.Value);
                     // Copy the file to the new location with the new name
                     File.Copy(selectedFile, targetFile, true);
@@ -521,7 +572,7 @@ namespace iRacingEquanimityPaint
                 SaveOptions(loadOptions, configPath);
             }
 
-            Console.WriteLine($"Options:");
+            Console.WriteLine($"Options from file:");
             foreach (PropertyInfo property in loadOptions.GetType().GetProperties())
             {
                 // Get the value of the property
@@ -623,9 +674,11 @@ namespace iRacingEquanimityPaint
         public struct Options
         {
             public bool RandomMode { get; set; } = true;
+            public bool RandomPerDriver { set; get; } = false;
+            public bool IgnoreCarNumFile { set; get; } = false;
+            public bool OnlyRaces { get; set; } = false;
             public bool QuitAfterCopy { get; set; } = false;
             public bool DeletePaintsFolder { set; get; } = false;
-            public bool OnlyRaces { get; set; } = false;
             public int SpecMapPercentageChance { set; get; } = 100;
             public bool CarSpecificHelmetSuit { set; get; } = false;
             public bool LogToFile { get; set; } = true;

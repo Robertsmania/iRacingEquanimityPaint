@@ -36,6 +36,8 @@ namespace iRacingEquanimityPaint
 
             if (startArg == "iRacingPaints")
             {
+                Console.WriteLine("iRacingPaints command line option - deleting paints and reloading textures.");
+                userOptions.DeletePaintsFolder = true;
                 CleanUp();
                 irsdk.ReloadTextures(IRacingSdkEnum.ReloadTexturesMode.All, 0);
                 return;
